@@ -1,0 +1,6 @@
+USERNAME=<RABBITMQ_USERNAME>
+PASSWORD=<RABBITMQ_PASSWORD>
+CONF=/etc/zabbix/zabbix_agentd.conf
+ZABBIX_SERVER='<SERVER_ZABBIX>'
+ZABBIX_NODE_HOSTNAME='<ZABBIX_NODENAME>'
+#FILTER='[{"name": "<queue1>:<name1>"}, {"name": "<queue2>:<name2>"}]'
