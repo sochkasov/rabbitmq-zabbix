@@ -1,6 +1,7 @@
 #!/usr/bin/env /usr/bin/python
 '''Python module to query the RabbitMQ Management Plugin REST API and get
 results that can then be used by Zabbix.
+
 https://github.com/jasonmcintosh/rabbitmq-zabbix
 '''
 import json
@@ -13,18 +14,23 @@ import os
 import logging
 
 logging.basicConfig(filename='/var/log/zabbix/rabbitmq_zabbix.log', level=logging.WARNING, format='%(asctime)s %(levelname)s: %(message)s')
+#logging.basicConfig(filename='/var/log/zabbix/rabbitmq_zabbix.log', level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
 
 class RabbitMQAPI(object):
     '''Class for RabbitMQ Management API'''
 
     def __init__(self, user_name='guest', password='guest', host_name='',
-                 port=15672, conf='/etc/zabbix/zabbix_agentd.conf', senderhostname=None):
+                 port=15672, conf='/etc/zabbix/zabbix_agentd.conf', senderhostname=None,
+                 zabbix_server=None):
         self.user_name = user_name
         self.password = password
         self.host_name = host_name or socket.gethostname()
         self.port = port
         self.conf = conf or '/etc/zabbix/zabbix_agentd.conf'
         self.senderhostname = senderhostname
+        self.zabbix_server = zabbix_server
+        logging.debug('-------------------')
+        logging.debug('zabbix_server='+zabbix_server)
 
     def call_api(self, path):
         '''Call the REST API and convert the results into JSON.'''
@@ -61,12 +67,12 @@ class RabbitMQAPI(object):
         nodes = []
         for node in self.call_api('nodes'):
             # We need to return the node name, because Zabbix
-            # does not support @ as an item parameter
+            # does not support @ as an item paramater
             name = node['name'].split('@')[1]
             element = {'{#NODENAME}': name,
                        '{#NODETYPE}': node['type']}
             nodes.append(element)
-            logging.debug('Discovered nodes '+name+'/'+node['type'])
+            logging.debug('Discovered nodes '+name+' -> '+node['type'])
         return nodes
 
     def check_queue(self, filters=None):
@@ -96,6 +102,7 @@ class RabbitMQAPI(object):
 
     def _prepare_data(self, queue, tmpfile):
         '''Prepare the queue data for sending'''
+        logging.debug("TEMP FILE : %s" % (tmpfile.name))
         for item in ['memory', 'messages', 'messages_unacknowledged',
                      'consumers']:
             key = '"rabbitmq.queues[{0},queue_{1},{2}]"'
@@ -113,11 +120,15 @@ class RabbitMQAPI(object):
 
     def _send_data(self, tmpfile):
         '''Send the queue data to Zabbix.'''
-        args = 'zabbix_sender -c {0} -i {1}'
+        args = 'zabbix_sender -vv -c {0} -i {1} -z {2}'
         if self.senderhostname:
             args = args + " -s " + self.senderhostname
         return_code = 0
-        process = subprocess.Popen(args.format(self.conf, tmpfile.name),
+        logging.debug('zabbix-sender senderhostname='+str(self.senderhostname))
+        logging.debug('zabbix-sender args='+str(args))
+        logging.debug('zabbix-sender string='+str(args.format(self.conf, tmpfile.name, self.zabbix_server)))
+
+        process = subprocess.Popen(args.format(self.conf, tmpfile.name, self.zabbix_server),
                                            shell=True, stdout=subprocess.PIPE,
                                            stderr=subprocess.PIPE)
         out, err = process.communicate()
@@ -172,13 +183,15 @@ def main():
     parser.add_option('--node', help='Which node to check (valid for --check=server)')
     parser.add_option('--conf', default='/etc/zabbix/zabbix_agentd.conf')
     parser.add_option('--senderhostname', default='', help='Allows including a sender parameter on calls to zabbix_sender')
+    parser.add_option('--zabbix_server', default='', help='IP address zabbix server for send data of zabbix_sender')
     (options, args) = parser.parse_args()
     if not options.check:
         parser.error('At least one check should be specified')
     logging.debug("Started trying to process data")
     api = RabbitMQAPI(user_name=options.username, password=options.password,
                       host_name=options.hostname, port=options.port,
-                      conf=options.conf, senderhostname=options.senderhostname)
+                      conf=options.conf, senderhostname=options.senderhostname,
+                      zabbix_server=options.zabbix_server)
     if options.filters:
         try:
             filters = json.loads(options.filters)
