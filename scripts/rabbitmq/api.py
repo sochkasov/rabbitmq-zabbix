@@ -67,12 +67,12 @@ class RabbitMQAPI(object):
         nodes = []
         for node in self.call_api('nodes'):
             # We need to return the node name, because Zabbix
-            # does not support @ as an item paramater
+            # does not support @ as an item parameter
             name = node['name'].split('@')[1]
             element = {'{#NODENAME}': name,
                        '{#NODETYPE}': node['type']}
             nodes.append(element)
-            logging.debug('Discovered nodes '+name+' -> '+node['type'])
+            logging.debug('Discovered nodes '+name+'/'+node['type'])
         return nodes
 
     def check_queue(self, filters=None):
